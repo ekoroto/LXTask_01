@@ -1,4 +1,4 @@
-#Task 1
+# Task 1
 ## Description
 This program gets 3 input arguments: 
 * path to file `students.json`
