@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from json import dumps, loads
 from os import getcwd, mkdir
 from os.path import exists
-from sys import exit
 
 from dict2xml import dict2xml
 
-from my_exception import MyException
+from merger import merge
 
 
 class AbstractExporter(ABC):
@@ -49,11 +48,6 @@ class FileHandler:
         self.rooms = self.read(self.args.get_rooms_path())
         self.exporter = self.args.get_exporter()
 
-    def merge(self):
-        merged_data = self.rooms
-        self._assign_students(merged_data)
-        return merged_data
-
     def read(self, file_path):
         with open(file_path, 'r') as f:
             data = f.read()
@@ -61,7 +55,7 @@ class FileHandler:
             return data
 
     def write(self):
-        merged_data = self.merge()
+        merged_data = merge(self.rooms, self.students)
         export_data = self.exporter().export(merged_data)
         folder_path = getcwd() + '/output_data/'
         file_path = folder_path + 'output' + self.exporter.extension
@@ -69,16 +63,6 @@ class FileHandler:
             mkdir(folder_path)
         with open(file_path, 'w') as f:
             f.write(export_data)
-
-    def _assign_students(self, rooms_list):
-        """
-            Loop at students list and assign them to corresponding rooms.
-        """
-        for student_dict in self.students:
-            student = student_dict.copy()
-            student.pop('room')
-            rooms_list[student_dict.get('room')].setdefault('students', []).append(student)
-        return rooms_list
 
     @staticmethod
     def _deserialize_json(data):
@@ -94,7 +78,6 @@ class ArgsHandler:
 
     def __init__(self):
         self.args = self.parse_args()
-        self.validate_args()
 
     def get_exporter(self):
         if self.args.format == 'xml':
@@ -107,25 +90,20 @@ class ArgsHandler:
     def get_students_path(self):
         return self.args.students_path
 
-    @staticmethod
-    def parse_args():
+    def parse_args(self):
         parser = ArgumentParser()
-        parser.add_argument('students_path', help='Path to file with students.')
-        parser.add_argument('rooms_path', help='Path to file with rooms.')
-        parser.add_argument('format', help='Format of export.')
+        parser.add_argument('students_path', type=self._validate_path, help='Path to file with students.')
+        parser.add_argument('rooms_path', type=self._validate_path, help='Path to file with rooms.')
+        parser.add_argument('format', type=self._validate_format, help='Format of export.')
         return parser.parse_args()
 
-    def validate_args(self):
-        try:
-            if not exists(self.args.students_path):
-                raise MyException('Incorrect path to first file.')
-            elif not exists(self.args.rooms_path):
-                raise MyException('Incorrect path to second file.')
-            elif self.args.format not in self._formats:
-                raise MyException('Incorrect format of export.')
+    @staticmethod
+    def _validate_path(value):
+        if not exists(value):
+            raise ArgumentTypeError(f'Incorrect path {value}')
+        return value
 
-        except MyException as err:
-            print(err.args[0])
-            exit()
-        except (IndexError, FileNotFoundError):
-            exit()
+    def _validate_format(self, value):
+        if value not in self._formats:
+            raise ArgumentTypeError(f'Incorrect format of export {value}')
+        return value
